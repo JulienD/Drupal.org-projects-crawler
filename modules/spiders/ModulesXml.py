@@ -39,8 +39,9 @@ class ModuleXml(XMLFeedSpider):
                     item['title'] = xxs.select('title/text()').extract()[0]
                     item['project_url'] = xxs.select('link/text()').extract()[0]
                     item['git_url'] = "http://git.drupal.org/project/%s.git" % (name)
-                    item['version'] = xxs.select('default_major/text()').extract()[0]
+                    version = xxs.select('default_major/text()').extract()
+                    if (version):
+                        item['version'] = version[0]
+                    else:
+                        item['version'] = ''
                     yield item
-
-
-#scrapy crawl ModulesXml -a version=7

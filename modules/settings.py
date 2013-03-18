@@ -22,8 +22,8 @@ ITEM_PIPELINES = [
 ]
 
 MYSQL = {
-	'user':'user',
+	'user':'root',
 	'host':'localhost',
 	'password':'password',
-	'dbname':'modules'
+	'dbname':'drupalmodules'
 }
