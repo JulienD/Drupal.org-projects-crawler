@@ -1,10 +1,4 @@
-# Define your item pipelines here
-#
-# Don't forget to add your pipeline to the ITEM_PIPELINES setting
-# See: http://doc.scrapy.org/topics/item-pipeline.html
-
 import MySQLdb
-
 from modules.items import Module
 from modules.settings import MYSQL
 
@@ -12,7 +6,7 @@ from scrapy.conf import settings
 
 class SQLStorePipeline(object):
 
-	table_name = 'modules2';
+	table_name = 'modules';
 
 	def __init__(self):
 		# Connect to the database.
@@ -30,28 +24,24 @@ class SQLStorePipeline(object):
 			if (not(result[0] == True)):
 				self.createTable();
 
-
 	def process_item(self, item, spider):
 		try:
-			self.cursor.execute("""INSERT IGNORE INTO modules2 (name, title, project_url, git_url, version) VALUES (%s, %s, %s, %s, %s)""",
-				(
-				item['name'].encode('utf-8', 'ignore'),
+			self.cursor.execute("""INSERT IGNORE INTO %s (name, title, project_url, git_url, version) VALUES (%%s, %%s, %%s, %%s, %%s)""" % self.table_name,
+				(item['name'].encode('utf-8', 'ignore'),
 				item['title'].encode('utf-8', 'ignore'),
 				item['project_url'].encode('utf-8', 'ignore'),
 				item['git_url'],
 				item['version'].encode('utf-8', 'ignore'),
-				))
+			))
 			self.conn.commit()
-
 		except MySQLdb.Error, e:
 			print ('Unable to save the projet %s') % (item['name'])
 			print (' >> %s') % (e)
 
 		return item
 
-
 	def createTable(self):
-		self.cursor.execute("""CREATE TABLE IF NOT EXISTS modules2 (
+		self.cursor.execute("""CREATE TABLE IF NOT EXISTS %s (
 			  `id` int(11) NOT NULL AUTO_INCREMENT,
 			  `name` varchar(255) NOT NULL,
 			  `title` varchar(255) NOT NULL,
@@ -62,5 +52,5 @@ class SQLStorePipeline(object):
 			  `created` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
 			  PRIMARY KEY (`id`),
 			  UNIQUE KEY `name` (`name`)
-			);""")
+			);""" % self.table_name)
 		self.conn.commit()
