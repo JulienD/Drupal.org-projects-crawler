@@ -18,12 +18,12 @@ NEWSPIDER_MODULE = 'modules.spiders'
 #USER_AGENT = 'drupalmodules (+http://www.yourdomain.com)'
 # Our do-it-all pipeline
 ITEM_PIPELINES = [
-    'modules.pipelines.SQLStorePipeline'
+  'modules.pipelines.SQLStorePipeline'
 ]
 
 MYSQL = {
 	'user':'root',
 	'host':'localhost',
 	'password':'password',
-	'dbname':'drupalmodules'
+	'dbname':'drupal_projects'
 }
