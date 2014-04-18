@@ -1,116 +1,191 @@
 from scrapy.contrib.spiders import XMLFeedSpider
-from scrapy.selector import XmlXPathSelector, HtmlXPathSelector
+from scrapy.selector import Selector
 from scrapy.http import Request
 from subprocess import call
-from modules.items import Information, Statistic, Releases, Release
+from modules.items import Project, Information, Statistic, Release
+
 
 class ModuleXml(XMLFeedSpider):
-  name = 'ModulesXml'
+    name = 'ModulesXml'
 
-  allowed_domains = ["drupal.org"]
-  start_urls = ["http://updates.drupal.org/release-history/project-list/all/7"]
+    allowed_domains = ["drupal.org"]
+    start_urls = ["http://updates.drupal.org/release-history/project-list/all/7"]
+    #start_urls = ["http://drupal-commerce.local/drupal-project-release-7.xml"]
 
-  iterator = 'iternodes'
-  itertag = 'projects'
+    iterator = 'iternodes'
+    itertag = 'projects'
 
-  def __init__(self, version = '7'):
-      self.version = '%s.x' % (version)
+    def __init__(self, version='7'):
+        self.version = '%s.x' % (version)
+        
 
-  def parse_node(self, response, node):
-    modules = []
-    for project_name in node.select('project/short_name/text()').extract():
-      # Sandboxes are nammed with numeric values.
-      if project_name.isnumeric() == True:
-        pass
-      # Real project has real name.
-      else:
-        project_release_url = "http://updates.drupal.org/release-history/%s/%s" % (project_name, self.version)
-        modules.append(Request(url=project_release_url, callback=self.parseProjectInformation, meta={'project_name': project_name}, priority=200))
-        modules.append(Request(url=project_release_url, callback=self.parseProjectVersion, meta={'project_name': project_name}, dont_filter=True))
-        project_page_url = "http://drupal.org/project/%s" % (project_name)
-        modules.append(Request(url=project_page_url, callback=self.parseProjectStatistics, meta={'project_name': project_name}, priority=100))
-    return modules
+    """
+      Main parser.
+    """
+    def parse(self, response):
+        # Parses the response.
+        sel = Selector(response)
+        # Extract all the projects.
+        projects = sel.xpath('/projects/project')
+        projects.extract()
 
+        for index, node in enumerate(projects):
 
-  def parseProjectInformation(self, response):
-    xxs = XmlXPathSelector(response)
-    # Ensure the project exist and the page don't display an error.
-    if not (xxs.select('/error/text()').extract()):
-      if xxs.select('short_name/text()').extract():
-        info = Information()
-        info['project_name'] = response.meta['project_name']
-        info['project_title'] = xxs.select("title/text()").extract()[0]
-        info['project_url'] = xxs.select("link/text()").extract()[0]
-        info['project_git_url'] = "http://git.drupal.org/project/%s.git" % (response.meta['project_name'])
+            # Initialize a project.
+            project = Project()
+            project['name'] = node.xpath('short_name/text()').extract()[0]
 
-        # Extracts all the terms to gets the project type module/theme
-        terms = xxs.select('terms/term')
-        info['project_type'] = ''
-        for term in terms:
-          if term.select('name/text()').extract()[0] == 'Projects':
-            # The first value is the project type.
-            info['project_type'] = term.select('value/text()').extract()[0]
-            break
-        yield info
+            # Sandboxes are named with numeric values and doesn't have
+            # information available in projects xml feed.
+            if node.xpath('short_name/text()').extract()[0].isnumeric() == True:
+                # TODO : find how to extract information for sandboxes. We need
+                # to store them at least.
+                pass
+            # Real projects have real names.
+            else:
+                project['information'] = Information()
+                project['statistics'] = Statistic()
+                project['releases'] = []
+
+                # Gets information about the project.
+                url = "http://updates.drupal.org/release-history/%s/%s" % (project['name'], self.version)
+                yield Request(url=url, meta={'project': project},
+                              callback=self.parse_project_xml)
 
 
-  def parseProjectVersion(self, response):
-    xxs = XmlXPathSelector(response)
-    # Ensure the project exist and the page don't display an error.
-    if not (xxs.select('/error/text()').extract()):
-      if xxs.select('short_name/text()').extract():
-        releases = Releases()
-        releases['project_name'] = response.meta['project_name']
-        releases['releases'] = []
+    """
+      Helper function to parse project xml feed.
+    """
+    def parse_project_xml(self, response):
 
-        for version in xxs.select('releases/release'):
-          release = Release()
-          if version.select('name/text()').extract():
-            release['release_name'] = version.select('name/text()').extract()[0]
-          if version.select('version/text()').extract():
-            release['release_version'] = version.select('version/text()').extract()[0]
-          if version.select('tag/text()').extract():
-            release['release_tag'] = version.select('tag/text()').extract()[0]
-          if version.select('version_major/text()').extract():
-            release['version_major'] = version.select('version_major/text()').extract()[0]
-          if version.select('version_patch/text()').extract():
-            release['version_patch'] = version.select('version_patch/text()').extract()[0]
-          if version.select('version_extra/text()').extract():
-            release['version_extra'] = version.select('version_extra/text()').extract()[0]
-          if version.select('date/text()').extract():
-            release['release_date'] = version.select('date/text()').extract()[0]
-          releases['releases'].append(release)
+        # Parses the response.
+        sel = Selector(response)
+        # Gets the project item.
+        project = response.meta['project']
 
-        yield releases
+        if not (sel.xpath("title/text()").extract()):
+            return
+        else:
+            # Title.
+            project['information']['title'] = sel.xpath("title/text()").extract()[0]
+            project['information']['type'] = '';
+            # Type - extracts all the the first term to gets the project type - module | theme | distribution.
+            for term in sel.xpath('terms/term'):
+                if term.xpath('name/text()').extract()[0] == 'Projects':
+                    # Gets the project type from the first term.
+                    project['information']['type'] = term.xpath('value/text()').extract()[0]
+                    break
+
+            # Url.
+            project['information']['url'] = sel.xpath("link/text()").extract()[0]
+
+            # Git url.
+            project['information']['git_url'] = "http://git.drupal.org/project/%s.git" % (project['name'])
+
+            # Api version.
+            project['information']['api_version'] = sel.xpath('api_version/text()').extract()[0]
+
+            # Recommended major version.
+            if sel.xpath("recommended_major/text()").extract():
+                project['information']['recommended_major'] = sel.xpath("recommended_major/text()").extract()[0]
+            else:
+                project['information']['recommended_major'] = ''
+
+            # Supported major version.
+            if sel.xpath("supported_majors/text()").extract():
+                project['information']['supported_majors'] = sel.xpath("supported_majors/text()").extract()[0]
+            else:
+                project['information']['supported_majors'] = ''
+
+            # Default major version.
+            if sel.xpath("default_major/text()").extract():
+                project['information']['default_major'] = sel.xpath("default_major/text()").extract()[0]
+            else:
+                project['information']['default_major'] = ''
+
+            #
+            for version in sel.xpath('releases/release'):
+                release = Release()
+                #
+                if version.xpath('name/text()').extract():
+                    release['name'] = version.xpath('name/text()').extract()[0]
+                #
+                if version.xpath('version/text()').extract():
+                    release['version'] = version.xpath('version/text()').extract()[0]
+                #
+                if version.xpath('tag/text()').extract():
+                    release['tag'] = version.xpath('tag/text()').extract()[0]
+                #
+                if version.xpath('date/text()').extract():
+                    release['date'] = version.xpath('date/text()').extract()[0]
+                #
+                if version.xpath('version_major/text()').extract():
+                    release['version_major'] = version.xpath('version_major/text()').extract()[0]
+                #
+                if version.xpath('version_patch/text()').extract():
+                    release['version_patch'] = version.xpath('version_patch/text()').extract()[0]
+                #
+                if version.xpath('version_extra/text()').extract():
+                    release['version_extra'] = version.xpath('version_extra/text()').extract()[0]
+
+                project['releases'].append(release)
+
+            url = "https://drupal.org/project/%s" % (project['name'])
+            yield Request(url=url, meta={'project': project},
+                          callback=self.parse_project_page)
 
 
-  def parseProjectStatistics(self, response):
-    statictics = Statistic()
-    hxs = HtmlXPathSelector(response)
 
-    print response.meta['project_name']
+    """
+      Project page parser.
+    """
+    def parse_project_page(self, response):
+        sel = Selector(response)
+        project = response.meta['project']
 
-    statictics['project_name'] = response.meta['project_name']
+        # Issues
+        issues = sel.xpath('//div[@class="issue-cockpit-All"]/div[@class="issue-cockpit-totals"]/a/text()')
+        if issues:
+            project['statistics']['opened_issues'] = issues.extract()[0].split(' ')[0]
+            project['statistics']['total_issues'] = issues.extract()[1].split(' ')[0]
 
-    # Gets the issues report section.
-    issues = hxs.select('//div[@class="issue-cockpit-All"]/div[@class="issue-cockpit-totals"]/a/text()')
-    if issues:
-      statictics['opened_issues'] = issues.extract()[0].split(' ')[0]
-      statictics['total_issues'] = issues.extract()[1].split(' ')[0]
+        # Bugs.
+        bugs = sel.xpath('//div[@class="issue-cockpit-1"]/div[@class="issue-cockpit-totals"]/a/text()')
+        if bugs:
+            project['statistics']['opened_bugs'] = bugs.extract()[0].split(' ')[0]
+            project['statistics']['total_bugs'] = bugs.extract()[1].split(' ')[0]
 
-    # Gets the bugs report section.
-    bugs = hxs.select('//div[@class="issue-cockpit-bug"]/div[@class="issue-cockpit-totals"]/a/text()')
-    if bugs:
-      statictics['opened_bugs'] = bugs.extract()[0].split(' ')[0]
-      statictics['total_bugs'] = bugs.extract()[1].split(' ')[0]
+        # Downloads and Installations
+        for stats in sel.xpath('//div[contains(@class,"project-info")]/ul/li'):
+            if stats.xpath('text()').extract()[0].startswith('Downloads'):
+                project['statistics']['downloads'] = stats.xpath('text()').extract()[0].split(' ')[1]
 
-    # Gets the number of module downloads and installation.
-    for stats in hxs.select('//div[contains(@class,"project-info")]/ul/li'):
-      if stats.select('text()').extract()[0].startswith('Downloads') :
-        statictics['downloads'] = stats.select('text()').extract()[0].split(' ')[1]
+            if stats.xpath('text()').extract()[0].startswith('Reported installs'):
+                project['statistics']['installs'] = stats.xpath('strong/text()').extract()[0]
 
-      if stats.select('text()').extract()[0].startswith('Reported installs'):
-        statictics['installs'] = stats.select('strong/text()').extract()[0]
 
-    yield statictics
+        '''
+        # Maintainers
+        print '>> maintainers'
+        for maintainer in sel.xpath('//div[contains(@id, "block-versioncontrol-project-project-maintainers")]/div/div/div/ul/li/div/a'):
+            uid = maintainer.select('@href').extract()[0]
+            project['releases'].append(uid)
+        '''
 
+        # Continue to get commits information.
+        url = "https://drupal.org%s" % (sel.xpath('//div[@id="project-commits"]/a/@href').extract()[0])
+        yield Request(url=url, meta={'project': project},
+                      callback=self.parse_project_commit_page)
+
+
+    """
+      Project commit page parser.
+    """
+    def parse_project_commit_page(self, response):
+        sel = Selector(response)
+        project = response.meta['project']
+
+        project['information']['last_commit'] = \
+        sel.xpath("//*[contains(concat(' ', @class, ' '), ' views-row-1 ')]/div/span/div/h3/a/text()").extract()[0]
+
+        return project

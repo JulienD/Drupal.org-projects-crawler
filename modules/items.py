@@ -5,17 +5,27 @@
 
 from scrapy.item import Item, Field
 
+class Project(Item):
+    name = Field()
+    information = Field()
+    statistics = Field()
+    releases = Field()
+    pass
+
 class Information(Item):
-    project_name = Field()
-    project_title = Field()
-    #project_description = Field()
-    project_type = Field()
-    project_url = Field()
-    project_git_url = Field()
+    title = Field()
+    description = Field()
+    type = Field()
+    url = Field()
+    git_url = Field()
+    api_version = Field()
+    recommended_major = Field()
+    supported_majors = Field()
+    default_major = Field()
+    last_commit = Field()
     pass
 
 class Statistic(Item):
-    project_name = Field()
     downloads = Field()
     installs = Field()
     opened_issues = Field()
@@ -24,17 +34,17 @@ class Statistic(Item):
     total_bugs = Field()
     pass
 
-class Releases(Item):
-    project_name = Field()
-    releases = Field()
-    pass
-
 class Release(Item):
-    release_name = Field()
-    release_version = Field()
-    release_tag = Field()
-    release_date = Field()
+    name = Field()
+    version = Field()
+    tag = Field()
+    date = Field()
     version_major = Field()
     version_patch = Field()
     version_extra = Field()
     pass
+
+class maintainer(Item):
+    maintainer_id = Field()
+    pass
+
