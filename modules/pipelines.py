@@ -1,7 +1,7 @@
 import MySQLdb
 import time
 
-from modules.items import Project, Information, Statistic, Release
+from modules.items import Project, Information, Statistic, Release, Maintainer
 
 from modules.settings import MYSQL
 from scrapy.conf import settings
@@ -25,6 +25,7 @@ class SQLStorePipeline(object):
             self.cursor = self.conn.cursor()
 
         self.request_time = datetime.now()
+
 
     def process_item(self, item, spider):
 
@@ -50,12 +51,15 @@ class SQLStorePipeline(object):
 
             # Saves project statistics.
             self.storeProjectStatistics(item, spider)
+
+            # Saves project maintainers.
+            self.storeProjectMaintainers(item, spider)
             return
+
 
     '''
         Saves or updates project information.
     '''
-
     def storeProjectInformation(self, item, spider):
         try:
             self.cursor.execute("""INSERT INTO projects (name, title, url, git_url,
@@ -90,7 +94,6 @@ class SQLStorePipeline(object):
     '''
         Saves project versions
     '''
-
     def storeProjectVersion(self, item, spider):
         for version in item['information']['supported_majors'].split(','):
             try:
@@ -107,6 +110,7 @@ class SQLStorePipeline(object):
             except MySQLdb.Error, e:
                 print ('Unable to save versions for the projet %s') % (item['name'])
                 print (' >> %s') % (e)
+
 
     '''
         Save releases for a project.
@@ -133,13 +137,13 @@ class SQLStorePipeline(object):
             print ('Unable to save release for the projet %s') % (item['name'])
             print (' >> %s') % (e)
 
+
     '''
         Saves statistics given a project
             - number of downloads and installs
             - total and opened bugs
             - total and opened issues
     '''
-
     def storeProjectStatistics(self, item, spider):
         try:
             self.cursor.execute(
@@ -158,10 +162,27 @@ class SQLStorePipeline(object):
             print ('Unable to save statistics for the projet %s') % (item['name'])
             print (' >> %s') % (e)
 
+
+    '''
+        Saves maintainers of a project
+    '''
+    def storeProjectMaintainers(self, item, spider):
+        for maintainer in item['maintainers']:
+            try:
+                self.cursor.execute("""INSERT INTO maintainers (project_id, profile_id)
+									VALUES (%s, %s)""",
+                                    (int(self.project_id),
+                                    maintainer.get('profile_id'))
+                )
+                self.conn.commit()
+            except MySQLdb.Error, e:
+                print ('Unable to save maintainers for the projet %s') % (item['name'])
+                print (' >> %s') % (e)
+
+
     '''
     Helper function to convert a ...
     '''
-
     def getInt(self, item, name):
         value = item.get(name)
         if value:

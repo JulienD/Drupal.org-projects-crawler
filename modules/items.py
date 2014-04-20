@@ -10,6 +10,7 @@ class Project(Item):
     information = Field()
     statistics = Field()
     releases = Field()
+    maintainers = Field()
     pass
 
 class Information(Item):
@@ -44,7 +45,7 @@ class Release(Item):
     version_extra = Field()
     pass
 
-class maintainer(Item):
-    maintainer_id = Field()
+class Maintainer(Item):
+    profile_id = Field()
     pass
 

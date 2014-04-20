@@ -2,15 +2,16 @@ from scrapy.contrib.spiders import XMLFeedSpider
 from scrapy.selector import Selector
 from scrapy.http import Request
 from subprocess import call
-from modules.items import Project, Information, Statistic, Release
+from modules.items import Project, Information, Statistic, Release, Maintainer
 
 
 class ModuleXml(XMLFeedSpider):
     name = 'ModulesXml'
 
     allowed_domains = ["drupal.org"]
-    start_urls = ["http://updates.drupal.org/release-history/project-list/all/7"]
-    #start_urls = ["http://drupal-commerce.local/drupal-project-release-7.xml"]
+    
+    #start_urls = ["http://updates.drupal.org/release-history/project-list/all/7"]
+    start_urls = ["file://127.0.0.1/tmp/drupal-project-release-7.xml"]
 
     iterator = 'iternodes'
     itertag = 'projects'
@@ -46,6 +47,7 @@ class ModuleXml(XMLFeedSpider):
                 project['information'] = Information()
                 project['statistics'] = Statistic()
                 project['releases'] = []
+                project['maintainers'] = []
 
                 # Gets information about the project.
                 url = "http://updates.drupal.org/release-history/%s/%s" % (project['name'], self.version)
@@ -164,13 +166,12 @@ class ModuleXml(XMLFeedSpider):
                 project['statistics']['installs'] = stats.xpath('strong/text()').extract()[0]
 
 
-        '''
         # Maintainers
         print '>> maintainers'
-        for maintainer in sel.xpath('//div[contains(@id, "block-versioncontrol-project-project-maintainers")]/div/div/div/ul/li/div/a'):
-            uid = maintainer.select('@href').extract()[0]
-            project['releases'].append(uid)
-        '''
+        for profile in sel.xpath('//div[contains(@id, "block-versioncontrol-project-project-maintainers")]/div/div/div/ul/li/div/a'):
+            maintainer = Maintainer()
+            maintainer['profile_id'] = profile.select('@href').extract()[0].split('/')[2]
+            project['maintainers'].append(maintainer)
 
         # Continue to get commits information.
         url = "https://drupal.org%s" % (sel.xpath('//div[@id="project-commits"]/a/@href').extract()[0])
